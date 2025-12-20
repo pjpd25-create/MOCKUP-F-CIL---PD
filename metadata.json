@@ -1,0 +1,7 @@
+{
+  "name": "PLATAFORMA MOCKUP FÁCIL - PD",
+  "description": "An application that generates mockups by applying a user-uploaded image to various contexts like stationery, apparel, and devices. Users can upload a PNG, choose a category, and provide an optional text prompt to guide the style of the generated mockups.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
