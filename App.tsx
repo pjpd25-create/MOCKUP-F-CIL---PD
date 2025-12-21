@@ -58,6 +58,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isZipping, setIsZipping] = useState<boolean>(false);
   const [isCleaning, setIsCleaning] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState<boolean>(false);
@@ -150,11 +151,40 @@ export const App: React.FC = () => {
     finally { setIsCleaning(false); }
   };
 
+  const handleDownloadAllZip = async () => {
+    if (generatedImages.length === 0 || !window.JSZip) return;
+    setIsZipping(true);
+    try {
+        const zip = new window.JSZip();
+        const folder = zip.folder("mockups-gerados");
+        
+        generatedImages.forEach((img, index) => {
+            if (img.image) {
+                const base64Data = img.image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
+                const fileName = `${img.category.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${index + 1}.png`;
+                folder.file(fileName, base64Data, { base64: true });
+            }
+        });
+
+        const content = await zip.generateAsync({ type: "blob" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = `mockups_${user?.name?.toLowerCase().replace(/\s/g, '_')}_${Date.now()}.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (err) {
+        console.error("Erro ao gerar ZIP:", err);
+        setError("Erro ao gerar arquivo compactado.");
+    } finally {
+        setIsZipping(false);
+    }
+  };
+
   const handleGenerate = useCallback(async () => {
     if (!uploadedImage || !imageMimeType) { setError('Envie um design primeiro.'); return; }
     if (selectedCategories.length === 0) { setError('Selecione ao menos um produto.'); return; }
     
-    let totalImagesToGenerate = 0;
     const jobs: { cat: string, type: 'standard' | '3d' }[] = [];
     
     selectedCategories.forEach(cat => {
@@ -162,11 +192,15 @@ export const App: React.FC = () => {
         if (cat.mode === 'standard' || cat.mode === 'both') types.push('standard');
         if (cat.mode === '3d' || cat.mode === 'both') types.push('3d');
         types.forEach(type => {
-            for(let v = 0; v < variationsCount; v++) { jobs.push({ cat: cat.name, type }); totalImagesToGenerate++; }
+            for(let v = 0; v < variationsCount; v++) { jobs.push({ cat: cat.name, type }); }
         });
     });
 
-    if (totalImagesToGenerate > MAX_BATCH_SIZE) { setError(`Limite excedido. Reduza as variações.`); return; }
+    // Removido o bloqueio para permitir geração massiva/ilimitada.
+    // Apenas mostramos um aviso visual se for realmente muito grande.
+    if (jobs.length > 50) { 
+        console.warn("Lote grande detectado. O processamento pode demorar alguns minutos.");
+    }
     
     setError(null);
     setIsGenerating(true);
@@ -180,6 +214,8 @@ export const App: React.FC = () => {
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
             const isSingle = selectedCategories.length === 1;
+            
+            // Aqui passamos a cor explicitamente escolhida pelo usuário
             const result = await generateMockup(uploadedImage, imageMimeType, job.cat, selectedStyle, isSingle ? placement : "Otimizado", selectedColor, isSingle ? selectedSize : "Padrão", backgroundType === 'custom' ? sceneImage : null, sceneMimeType, "", job.type, backgroundType, selectedMaterial);
             
             if (result) {
@@ -187,16 +223,22 @@ export const App: React.FC = () => {
                 results.push({ category: label, image: result, type: job.type });
                 const dbRes = await saveToHistoryDb(result, label, originalFileName);
                 setHistory(prev => [{ id: dbRes?.id || Date.now().toString(), image: result, category: label, date: new Date(), originalFileName }, ...prev]);
+                
+                // Atualizamos a lista de imagens em tempo real para o usuário ver o progresso
+                setGeneratedImages([...results]);
             }
             setProgress(Math.round(((i + 1) / jobs.length) * 100));
-            if (i < jobs.length - 1) await new Promise(r => setTimeout(r, 8000));
+            
+            // Delay curto para evitar sobrecarga, mas mantendo a velocidade para produção massiva
+            if (i < jobs.length - 1) await new Promise(r => setTimeout(r, 4500));
         }
-        setGeneratedImages(results);
         if (results.length > 0) {
             setShowSuccessToast(true);
             setTimeout(() => setShowSuccessToast(false), 5000);
         }
-    } catch (err: any) { setError("O limite de uso foi atingido ou ocorreu um erro. Tente novamente em 1 minuto."); }
+    } catch (err: any) { 
+        setError("Limite temporário atingido. O sistema retomará a produção ilimitada em instantes. Tente novamente em 30 segundos."); 
+    }
     finally { setIsGenerating(false); }
   }, [uploadedImage, imageMimeType, selectedCategories, variationsCount, selectedStyle, placement, selectedColor, selectedSize, sceneImage, sceneMimeType, originalFileName, user, backgroundType, selectedMaterial]);
 
@@ -219,7 +261,7 @@ export const App: React.FC = () => {
                 <CheckIcon className="h-6 w-6" />
                 <div className="flex flex-col">
                     <p className="font-black uppercase tracking-widest text-xs">Parabéns, {user.name}!</p>
-                    <p className="text-[10px] font-bold opacity-90 uppercase">Você fez o seu mockup com sucesso!</p>
+                    <p className="text-[10px] font-bold opacity-90 uppercase">Você gerou seus produtos ilimitados!</p>
                 </div>
             </div>
          </div>
@@ -248,11 +290,15 @@ export const App: React.FC = () => {
               <ImageUploader onImageUpload={(b, m, f) => { setUploadedImage(b); setImageMimeType(m); setOriginalFileName(f); }} onCleanImage={handleCleanImage} onRemoveImage={() => setUploadedImage(null)} isCleaning={isCleaning} uploadedImage={uploadedImage} />
             </section>
             <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">02. SELEÇÃO DE PRODUTOS</h2>
+              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">02. SELEÇÃO DE PRODUTOS & REDES SOCIAIS</h2>
               <CategorySelector categories={MOCKUP_CATEGORIES} selectedCategories={selectedCategories} onSelectionChange={setSelectedCategories} maxSelection={MAX_BATCH_SIZE} />
             </section>
             <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">03. AMBIENTE & CENA REAL</h2>
+              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">03. CORES DOS PRODUTOS</h2>
+              <ColorSelector colors={COLOR_OPTIONS} selectedColor={selectedColor} onSelectColor={setSelectedColor} selectedMaterial={selectedMaterial} onSelectMaterial={setSelectedMaterial} />
+            </section>
+            <section>
+              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">04. AMBIENTE & AGÊNCIA</h2>
               <div className="grid grid-cols-2 gap-2 mb-4">
                   {BACKGROUND_TYPES.map(bg => (
                       <button key={bg.id} onClick={() => setBackgroundType(bg.id)} className={`p-2 rounded-xl border-2 text-[8px] md:text-[9px] font-black uppercase tracking-tighter transition-all ${backgroundType === bg.id ? 'border-red-600 bg-red-600/10 text-white' : 'border-gray-800 bg-black/40 text-gray-600 hover:border-gray-700'}`}>{bg.label}</button>
@@ -267,21 +313,21 @@ export const App: React.FC = () => {
 
               {backgroundType !== 'solid' && (
                  <div className="space-y-4 pt-4 animate-fade-in">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">Estilo Criativo</label>
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">Estilo Criativo Agência</label>
                     <StyleSelector styles={STYLE_OPTIONS} selectedStyle={selectedStyle} onSelectStyle={setSelectedStyle} />
                  </div>
               )}
             </section>
             <section>
                 <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest">04. ESCALA</h2>
+                    <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest">05. ESCALA (VARIAÇÕES)</h2>
                     <span className="text-[10px] font-black text-white">{variationsCount}x</span>
                 </div>
-                <input type="range" min="1" max="5" value={variationsCount} onChange={(e) => setVariationsCount(parseInt(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-red-600"/>
+                <input type="range" min="1" max="10" value={variationsCount} onChange={(e) => setVariationsCount(parseInt(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-red-600"/>
             </section>
             <AdSpace type="vertical" className="mt-4 hidden md:flex" />
             <button onClick={handleGenerate} disabled={isGenerating || !uploadedImage || selectedCategories.length === 0} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 md:py-5 rounded-xl md:rounded-2xl shadow-xl transition-all disabled:opacity-30 uppercase tracking-widest text-base md:text-lg">
-                {isGenerating ? `PROCESSANDO (${progress}%)` : "CRIAR MOCKUP"}
+                {isGenerating ? `GERANDO (${progress}%)` : "INICIAR PRODUÇÃO ILIMITADA"}
             </button>
             {error && <p className="text-red-500 text-[9px] md:text-[10px] font-black text-center uppercase tracking-widest mt-4 bg-red-900/10 p-4 rounded-xl border border-red-900/20">{error}</p>}
           </div>
@@ -291,16 +337,29 @@ export const App: React.FC = () => {
             <div className="bg-gray-900/20 p-4 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-gray-800 min-h-[400px] md:min-h-[600px] relative shadow-2xl">
               <div className="flex border-b border-gray-800 mb-6 md:mb-8 gap-6 md:gap-10 items-center justify-between">
                 <div className="flex gap-6 md:gap-8">
-                    <button onClick={() => setActiveTab('current')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'current' ? 'text-red-500' : 'text-gray-600'}`}>ATUAL {activeTab === 'current' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
-                    <button onClick={() => setActiveTab('history')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'history' ? 'text-red-500' : 'text-gray-600'}`}>HISTÓRICO {activeTab === 'history' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
+                    <button onClick={() => setActiveTab('current')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'current' ? 'text-red-500' : 'text-gray-600'}`}>PRODUÇÃO ATUAL {activeTab === 'current' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
+                    <button onClick={() => setActiveTab('history')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'history' ? 'text-red-500' : 'text-gray-600'}`}>TODOS GERADOS {activeTab === 'history' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
                 </div>
-                {activeTab === 'history' && history.length > 0 && <button onClick={clearHistory} className="mb-4 text-red-600 font-black uppercase text-[8px] md:text-[9px] tracking-widest flex items-center gap-2"><TrashIcon className="h-4 w-4" /> LIMPAR TUDO</button>}
+                <div className="flex gap-2">
+                    {(activeTab === 'current' || activeTab === 'history') && (generatedImages.length > 0 || history.length > 0) && (
+                        <button 
+                            onClick={handleDownloadAllZip} 
+                            disabled={isZipping}
+                            className="mb-4 text-green-500 font-black uppercase text-[8px] md:text-[9px] tracking-widest flex items-center gap-2 border border-green-500/20 px-3 py-1.5 rounded-full hover:bg-green-500/10 transition-all"
+                        >
+                            <DownloadIcon className="h-4 w-4" /> 
+                            {isZipping ? 'ZIPANDO...' : 'BAIXAR TODOS (.ZIP)'}
+                        </button>
+                    )}
+                    {activeTab === 'history' && history.length > 0 && <button onClick={clearHistory} className="mb-4 text-red-600 font-black uppercase text-[8px] md:text-[9px] tracking-widest flex items-center gap-2 px-3 py-1.5"><TrashIcon className="h-4 w-4" /> LIMPAR TUDO</button>}
+                </div>
               </div>
               {activeTab === 'current' ? (
                 isGenerating ? (
                   <div className="flex flex-col items-center justify-center h-[300px] md:h-[400px] text-center px-4">
                     <div className="w-12 h-12 border-4 border-t-red-600 border-gray-800 rounded-full animate-spin mb-6"></div>
-                    <p className="text-red-500 font-black uppercase tracking-widest text-xs">Criando Mockups Profissionais...</p>
+                    <p className="text-red-500 font-black uppercase tracking-widest text-xs">Produzindo mockups em massa para redes sociais e agências...</p>
+                    <p className="text-[10px] text-gray-500 mt-2">{progress}% concluído</p>
                   </div>
                 ) : generatedImages.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 animate-fade-in">
@@ -313,7 +372,7 @@ export const App: React.FC = () => {
                   </div>
                 ) : (
                   <div className="h-[300px] md:h-[400px] flex flex-col items-center justify-center text-gray-800 border-4 border-dashed border-red-900/5 rounded-[1.5rem] md:rounded-[3rem] p-6 text-center">
-                    <PhotoIcon className="h-12 w-12 opacity-5 mb-4"/><p className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">Aguardando seu design para gerar identidades visuais realistas.</p>
+                    <PhotoIcon className="h-12 w-12 opacity-5 mb-4"/><p className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">Aguardando design para iniciar produção ilimitada para marcas, agências e negócios.</p>
                   </div>
                 )
               ) : (
@@ -324,7 +383,7 @@ export const App: React.FC = () => {
                         <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[6px] font-black text-gray-400 uppercase tracking-widest border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">{new Date(item.date).toLocaleDateString()}</div>
                     </div>
                   ))}
-                  {history.length === 0 && <div className="col-span-full text-center text-gray-800 py-24 font-black uppercase text-[9px] tracking-widest border-4 border-dashed border-gray-900/50 rounded-[1.5rem]">NENHUM MOCKUP NO HISTÓRICO</div>}
+                  {history.length === 0 && <div className="col-span-full text-center text-gray-800 py-24 font-black uppercase text-[9px] tracking-widest border-4 border-dashed border-gray-900/50 rounded-[1.5rem]">HISTÓRICO VAZIO</div>}
                 </div>
               )}
             </div>

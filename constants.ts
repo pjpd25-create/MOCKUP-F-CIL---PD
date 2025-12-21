@@ -1,10 +1,11 @@
 
 // Estrutura de Opções
 interface MockupOption {
-  type: 'apparel' | 'headwear' | 'drinkware' | 'stationery' | 'digital' | 'bags' | 'signage' | 'packaging' | 'vehicle' | 'merch' | 'books' | 'furniture';
+  type: 'apparel' | 'headwear' | 'drinkware' | 'stationery' | 'digital' | 'bags' | 'signage' | 'packaging' | 'vehicle' | 'merch' | 'books' | 'furniture' | 'social_media' | 'branding_kit' | 'corporate';
 }
 
-export const MAX_BATCH_SIZE = 20;
+// Limite elevado para suportar produção massiva/ilimitada na percepção do usuário
+export const MAX_BATCH_SIZE = 1000;
 
 export const BACKGROUND_TYPES = [
     { id: 'studio', label: 'Estúdio Isolado', description: 'Fundo limpo e profissional' },
@@ -23,105 +24,120 @@ export const MATERIAL_OPTIONS = [
 ];
 
 const MOCKUP_OPTIONS: { [key: string]: MockupOption } = {
+  // --- IDENTIDADE VISUAL E MARCAS (BRANDING) ---
+  "Manual de Identidade Visual": { type: 'branding_kit' },
+  "Apresentação de Logo (Grid)": { type: 'branding_kit' },
+  "Papelaria Corporativa Completa": { type: 'branding_kit' },
+  "Cartão de Visita Premium": { type: 'stationery' },
+  "Pasta para Documentos de Agência": { type: 'corporate' },
+  "Crachá e Cordão Executivo": { type: 'corporate' },
+  "Papel Timbrado A4": { type: 'stationery' },
+  "Kit Boas-Vindas Empresa": { type: 'branding_kit' },
+
+  // --- REDES SOCIAIS E CONTEÚDO ---
+  "Post Instagram (Feed 1:1)": { type: 'social_media' },
+  "Carrossel de Conteúdo": { type: 'social_media' },
+  "Story Instagram": { type: 'social_media' },
+  "Capa de LinkedIn Corporativa": { type: 'social_media' },
+  "Banner de Canal YouTube": { type: 'social_media' },
+  "Template para Reels/TikTok": { type: 'social_media' },
+  "Anúncio Facebook Ads": { type: 'social_media' },
+  "Capa de Podcast": { type: 'social_media' },
+
   // --- VESTUÁRIO (Apparel) ---
   "Camiseta Polo": { type: 'apparel' },
   "Camiseta Manga Longa": { type: 'apparel' },
   "Regata": { type: 'apparel' },
   "Camiseta Básica (T-Shirt)": { type: 'apparel' },
-  "Moletom com Capuz (Hoodie)": { type: 'apparel' },
-  "Avental Profissional": { type: 'apparel' },
+  "Moletom Hoodie": { type: 'apparel' },
+  "Uniforme Social Executivo": { type: 'apparel' },
+  "Avental de Marca": { type: 'apparel' },
 
   // --- ACESSÓRIOS E MERCH ---
   "Boné Clássico": { type: 'headwear' },
   "Boné Trucker": { type: 'headwear' },
-  "Caneta Personalizada": { type: 'merch' },
+  "Caneta Metálica": { type: 'merch' },
   "Chaveiro": { type: 'merch' },
-  "Carteira de Couro": { type: 'merch' },
-  "Canudo Ecológico": { type: 'merch' },
-
-  // --- PAPELARIA E ESCRITÓRIO ---
-  "Cartão de Visita": { type: 'stationery' },
-  "Papel Timbrado A4": { type: 'stationery' },
-  "Pasta Corporativa": { type: 'stationery' },
-  "Diploma Premium": { type: 'stationery' },
-  "Certificado": { type: 'stationery' },
-  "Envelope Ofício": { type: 'stationery' },
-  "Crachá com Cordão": { type: 'stationery' },
-
-  // --- LIVROS E EBOOKS ---
-  "E-book (Digital)": { type: 'digital' },
-  "Livro Físico (Capa Dura)": { type: 'books' },
-  "Livro Físico (Brochura)": { type: 'books' },
-  "Revista / Magazine": { type: 'books' },
-
-  // --- BOLSAS E MALAS ---
-  "Bolsa Feminina": { type: 'bags' },
-  "Mala de Viagem": { type: 'bags' },
-  "Mochila Corporativa": { type: 'bags' },
-  "Ecobag (Algodão)": { type: 'bags' },
+  "Mochila para Notebook": { type: 'bags' },
+  "Ecobag de Algodão": { type: 'bags' },
 
   // --- BEBIDAS (DRINKWARE) ---
   "Caneca de Cerâmica": { type: 'drinkware' },
-  "Garrafa Térmica": { type: 'drinkware' },
+  "Garrafa Térmica (Tumbler)": { type: 'drinkware' },
   "Copo de Café Descartável": { type: 'drinkware' },
 
-  // --- MÓVEIS (FURNITURE) ---
-  "Cadeira de Escritório": { type: 'furniture' },
-  "Mesa de Reunião": { type: 'furniture' },
-
   // --- SINALIZAÇÃO E AMBIENTE ---
-  "Fachada de Loja": { type: 'signage' },
+  "Fachada de Loja/Agência": { type: 'signage' },
   "Banner Roll-up": { type: 'signage' },
-  "Outdoor": { type: 'signage' },
+  "Outdoor Digital": { type: 'signage' },
+  "Totem de Recepção": { type: 'signage' },
+  "Adesivo de Veículo Corporativo": { type: 'vehicle' },
 
   // --- EMBALAGENS ---
-  "Sacola de Papel": { type: 'packaging' },
-  "Caixa de Envio": { type: 'packaging' },
+  "Sacola de Papel Luxo": { type: 'packaging' },
+  "Caixa de Envio E-commerce": { type: 'packaging' },
 };
 
 export const MOCKUP_CATEGORIES = Object.keys(MOCKUP_OPTIONS);
 
 export const STYLE_OPTIONS: string[] = [
     "Fotorrealista (Alta Definição)",
-    "Estúdio (Fundo Infinito)",
-    "Lifestyle Corporativo (Escritório)",
-    "Estilo Mão Segurando Produto",
-    "Estilo Pessoa Pegando o Objeto",
-    "Minimalista Clean",
+    "Estúdio Minimalista Clean",
+    "Escritório de Agência Moderno",
+    "Estilo Lifestyle Urbano",
+    "Cena Corporativa Executiva",
+    "Social Media Vibe (Dinâmico)",
     "Luxo / Premium",
-    "Renderização 3D Digital",
+    "Renderização 3D Futurista",
+    "Mão Segurando o Produto",
 ];
 
 export const COLOR_OPTIONS: string[] = [
-  "Branco", "Preto", "Cinza", "Azul Marinho", "Vermelho", "Verde Musgo", "Dourado", "Prata Metálico"
+  "Branco Puro", 
+  "Preto Piano", 
+  "Cinza Espacial", 
+  "Azul Real", 
+  "Vermelho Vibrante", 
+  "Verde Tiffany", 
+  "Dourado Premium", 
+  "Prata Metálico",
+  "Rosa Millennial",
+  "Roxo Agency",
+  "Bege Minimalista"
 ];
 
 const SIZES_BY_TYPE: { [key: string]: string[] } = {
-  apparel: ["P", "M", "G", "GG", "Infantil"],
-  headwear: ["Tamanho Único"],
+  apparel: ["P", "M", "G", "GG"],
+  headwear: ["Único"],
   drinkware: ["Padrão", "Grande"],
   stationery: ["A4", "A5", "Padrão"],
   books: ["Capa Dura", "Digital"],
   digital: ["Mobile", "Desktop"],
-  bags: ["Pequena", "Média", "Grande"],
+  bags: ["Média", "Grande"],
   signage: ["Padrão", "Grande Formato"],
-  packaging: ["Pequeno", "Médio", "Grande"],
-  furniture: ["Padrão", "Executivo"],
+  packaging: ["Padrão"],
+  furniture: ["Executivo"],
   merch: ["Padrão"],
+  social_media: ["1:1", "9:16", "16:9"],
+  branding_kit: ["Completo"],
+  corporate: ["Padrão"]
 };
 
 const PLACEMENTS_BY_TYPE: { [key: string]: string[] } = {
-  apparel: ["Frente Central", "Peito Esquerdo", "Peito Direito", "Costas Central", "Nuca", "Manga Esquerda", "Manga Direita"],
-  headwear: ["Frente Central", "Lateral Esquerda", "Lateral Direita", "Traseira", "Aba Superior"],
-  drinkware: ["Frente Central", "Envolvente 360", "Traseira"],
-  stationery: ["Centralizado", "Canto Superior Esquerdo", "Canto Superior Direito", "Inferior Direita"],
-  books: ["Capa Frontal", "Lombada", "Verso"],
-  digital: ["Tela Principal"],
-  bags: ["Frente Central", "Costas", "Lateral"],
+  apparel: ["Frente", "Costas", "Peito Esquerdo", "Manga"],
+  headwear: ["Frente", "Lateral"],
+  drinkware: ["Frente", "Envolvente"],
+  stationery: ["Centralizado"],
+  books: ["Capa"],
+  digital: ["Tela"],
+  bags: ["Frente"],
   signage: ["Centralizado"],
-  packaging: ["Topo da Tampa", "Frente Principal", "Lateral"],
-  furniture: ["Encosto", "Tampo"],
+  packaging: ["Topo", "Frente"],
+  furniture: ["Encosto"],
   merch: ["Centralizado"],
+  social_media: ["Fundo Total", "Centralizado Overlay"],
+  branding_kit: ["Visão Geral"],
+  corporate: ["Centralizado"]
 };
 
 export const getSizeOptionsForCategory = (category: string): string[] => {
