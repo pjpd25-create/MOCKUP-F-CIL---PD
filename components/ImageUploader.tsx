@@ -49,7 +49,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onC
                 const ctx = canvas.getContext('2d');
                 if (ctx) {
                     ctx.drawImage(img, 0, 0, width, height);
-                    // Use png to preserve transparency unless it was jpeg originally
                     const resultType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
                     resolve(canvas.toDataURL(resultType, 0.9));
                 } else {
@@ -71,45 +70,32 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onC
         setIsProcessing(true);
         const resizedDataUrl = await resizeImage(file);
         const base64String = resizedDataUrl.split(',')[1];
-        // Ensure we use the correct mime type based on output
         const mimeType = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
         onImageUpload(base64String, mimeType, file.name);
       } catch (err) {
         console.error("Error optimizing image:", err);
-        alert("Erro ao processar a imagem. Tente novamente.");
       } finally {
         setIsProcessing(false);
       }
-    } else {
-      alert("Por favor, envie um arquivo de imagem válido (PNG, JPG ou WEBP).");
     }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      processFile(file);
-    }
+    if (file) processFile(file);
   };
 
   const handleClick = () => {
-    if (!uploadedImage) {
-      fileInputRef.current?.click();
-    }
+    if (!uploadedImage) fileInputRef.current?.click();
   };
   
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-  }
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
       if (uploadedImage) return;
-
       const file = e.dataTransfer.files?.[0];
-      if (file) {
-        processFile(file);
-      }
+      if (file) processFile(file);
   }, [uploadedImage]);
 
   return (
@@ -122,7 +108,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onC
         className="hidden"
       />
       <div
-        className={`w-full aspect-video bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center ${!uploadedImage ? 'cursor-pointer hover:border-red-500 hover:bg-gray-700' : ''} transition-colors duration-300 relative`}
+        className={`w-full aspect-[2/1] bg-gray-800 border-2 border-dashed border-gray-600 rounded-xl flex items-center justify-center ${!uploadedImage ? 'cursor-pointer hover:border-red-500 hover:bg-gray-700' : ''} transition-all relative overflow-hidden`}
         onClick={handleClick}
         onDragOver={onDragOver}
         onDrop={onDrop}
@@ -130,36 +116,34 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, onC
         {isProcessing ? (
            <div className="flex flex-col items-center">
              <div className="w-8 h-8 border-4 border-t-red-600 border-gray-600 rounded-full animate-spin mb-2"></div>
-             <p className="text-sm text-gray-400">Otimizando imagem...</p>
+             <p className="text-[10px] text-gray-400 uppercase font-black">Processando...</p>
            </div>
         ) : preview ? (
           <img src={preview} alt="Preview" className="max-h-full max-w-full object-contain" />
         ) : (
-          <div className="text-center text-gray-400">
-            <UploadIcon className="h-12 w-12 mx-auto" />
-            <p className="mt-2 font-semibold">Clique para enviar ou arraste e solte</p>
-            <p className="text-sm">PNG, JPG ou WEBP</p>
+          <div className="text-center text-gray-500 px-4">
+            <UploadIcon className="h-8 w-8 mx-auto mb-2" />
+            <p className="font-black uppercase tracking-widest text-[10px]">Enviar Design Principal</p>
           </div>
         )}
       </div>
       {uploadedImage && !isProcessing && (
-        <div className="flex flex-col gap-2 mt-3">
+        <div className="flex gap-4 mt-4">
             <button
             onClick={onCleanImage}
             disabled={isCleaning}
-            className="w-full bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-gray-600 transition-colors duration-300 disabled:opacity-50"
-            title="Usar IA para remover o fundo da imagem"
+            className="flex-1 bg-gray-800 text-white font-black py-3 rounded-xl flex items-center justify-center hover:bg-gray-700 transition-all disabled:opacity-50 text-[10px] uppercase tracking-widest"
             >
-            <SparklesIcon className="h-5 w-5 mr-2" />
-            {isCleaning ? 'Removendo Fundo...' : 'Remover Fundo (IA)'}
+            <SparklesIcon className="h-4 w-4 mr-2" />
+            {isCleaning ? 'Removendo...' : 'Limpar Fundo'}
             </button>
 
             <button
             onClick={onRemoveImage}
-            className="w-full bg-red-900/50 text-red-200 font-semibold py-2 px-4 rounded-lg flex items-center justify-center hover:bg-red-900/80 transition-colors duration-300 border border-red-900"
+            className="flex-none bg-red-900/30 text-red-500 p-3 rounded-xl hover:bg-red-900/50 transition-all border border-red-900/20"
+            title="Remover Imagem"
             >
-            <TrashIcon className="h-5 w-5 mr-2" />
-            Remover Imagem
+            <TrashIcon className="h-5 w-5" />
             </button>
         </div>
       )}

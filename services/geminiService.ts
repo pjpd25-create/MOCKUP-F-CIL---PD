@@ -1,8 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Helper para retentativa com espera exponencial agressiva para contornar limites de cota
-async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 12000): Promise<T> {
+// Improved retry helper with specific handling for 429 (Resource Exhausted)
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, baseDelay = 10000): Promise<T> {
   let lastError: any;
   
   for (let i = 0; i < retries; i++) {
@@ -11,30 +11,29 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, baseDelay = 12000
     } catch (error: any) {
       lastError = error;
       const errorString = String(error).toLowerCase();
-      const errorMessage = (error?.message || '').toLowerCase();
-      const errorCode = error?.status || error?.code || error?.error?.code;
-
-      // Detecta especificamente erros de limite de cota (429) e sobrecarga do servidor (503)
-      const isRetryableError = 
-        errorCode === 429 || 
-        errorCode === 503 ||
-        errorCode === 500 || 
+      const status = error?.status;
+      
+      const isQuotaError = 
+        status === 429 || 
         errorString.includes('429') || 
         errorString.includes('quota') || 
-        errorString.includes('exceeded') ||
-        errorString.includes('xhr error') || 
-        errorString.includes('fetch failed') ||
-        errorMessage.includes('quota') ||
-        errorMessage.includes('resource_exhausted');
+        errorString.includes('resource_exhausted') ||
+        errorString.includes('limit');
 
-      if (isRetryableError && i < retries - 1) {
-        // Aumenta o atraso exponencialmente: 12s, 24s, 48s...
-        const calculatedDelay = baseDelay * Math.pow(2, i); 
-        const delay = Math.min(calculatedDelay, 60000); 
-        console.warn(`⚠️ Limite de cota atingido ou servidor instável. Tentativa ${i + 1}/${retries}. Aguardando ${delay/1000}s para evitar bloqueio...`);
+      if (isQuotaError && i < retries - 1) {
+        // Wait longer for quota errors: 10s, 20s, 40s...
+        const delay = baseDelay * Math.pow(2, i);
+        console.warn(`⚠️ Limite de API atingido. Tentativa ${i + 1}/${retries}. Aguardando ${delay/1000}s...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
+      
+      // Temporary server errors (5xx)
+      if (status >= 500 && i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+      }
+
       throw error;
     }
   }
@@ -71,18 +70,18 @@ export async function generateMockup(
   const parts: any[] = [designPart];
   
   const renderKeywords = mockupType === '3d' 
-      ? 'Ultra-high quality 3D Digital Mockup, PBR Materials (Physically Based Rendering), Ray-traced reflections, Octane Render style, Unreal Engine 5 cinematic lighting, 8k resolution, clean digital surfaces, perfect geometry.'
-      : 'Professional Product Photography, DSLR quality, natural studio lighting, soft shadows, 8k resolution, realistic depth of field, commercial advertisement style.';
+      ? 'Ultra-high quality 3D Digital Mockup, PBR Materials, Ray-traced reflections, Octane Render, 8k, clean digital surfaces.'
+      : 'Professional Product Photography, DSLR, natural studio lighting, soft shadows, 8k, realistic fotorrealistic depth of field.';
 
   let selectedMaterialDesc = '';
   switch(material) {
-      case 'matte': selectedMaterialDesc = 'Acabamento fosco (matte) premium, sem reflexos especulares, textura suave e aveludada.'; break;
-      case 'glossy': selectedMaterialDesc = 'Acabamento brilhante (glossy) vibrante, com reflexos nítidos de luz de estúdio, superfície polida.'; break;
-      case 'metallic': selectedMaterialDesc = 'Acabamento metálico industrial, reflexos de metal escovado, brilho metálico característico.'; break;
-      case 'fabric': selectedMaterialDesc = 'Textura têxtil realista, trama de fios visível sob zoom, fibras naturais perceptíveis.'; break;
-      case 'leather': selectedMaterialDesc = 'Textura de couro autêntica, padrão de grão irregular, rugosidade tátil realista.'; break;
-      case 'paper': selectedMaterialDesc = 'Textura de papel premium, celulose visível, toque poroso e orgânico.'; break;
-      default: selectedMaterialDesc = 'Acabamento de material realista de alta qualidade.';
+      case 'matte': selectedMaterialDesc = 'Acabamento fosco premium.'; break;
+      case 'glossy': selectedMaterialDesc = 'Acabamento brilhante vibrante.'; break;
+      case 'metallic': selectedMaterialDesc = 'Acabamento metálico industrial.'; break;
+      case 'fabric': selectedMaterialDesc = 'Textura têxtil realista.'; break;
+      case 'leather': selectedMaterialDesc = 'Textura de couro autêntica.'; break;
+      case 'paper': selectedMaterialDesc = 'Textura de papel premium.'; break;
+      default: selectedMaterialDesc = 'Acabamento de material realista.';
   }
 
   let bgInstruction = '';
@@ -93,25 +92,24 @@ export async function generateMockup(
               mimeType: sceneMimeType,
           },
       });
-      bgInstruction = `INTEGRATION: Place the product naturally into the provided custom scene. Match the lighting, shadows, and perspective of the scene.`;
+      bgInstruction = `Place the product naturally into the provided scene matching lighting and shadows.`;
   } else if (backgroundType === 'solid') {
-      bgInstruction = `BACKGROUND: A pure, clean, solid flat background with the hex color matching the product's base color (${color}). No shadows on the background, minimal modern look.`;
+      bgInstruction = `A pure solid flat background with the color ${color}.`;
   } else if (backgroundType === 'lifestyle') {
-      bgInstruction = `BACKGROUND: A realistic and relevant lifestyle environment for a ${category}. Use depth of field to keep the focus on the product. The environment should be modern and professional.`;
+      bgInstruction = `A realistic lifestyle environment for a ${category}.`;
   } else {
-      bgInstruction = `BACKGROUND: A clean, professional isolated studio background with soft infinite floor and professional lighting.`;
+      bgInstruction = `A clean professional isolated studio background.`;
   }
 
   const promptText = `TASK: Create a ${mockupType === '3d' ? '3D Render' : 'Photo Mockup'} of a ${category}.
-- RENDER MODE: ${renderKeywords}.
-- DESIGN ATTACHMENT: Apply the provided graphic onto the ${category}.
-- BASE COLOR: ${color}.
-- MATERIAL TEXTURE: ${selectedMaterialDesc}
-- POSITIONING: ${placement}.
-- VISUAL STYLE: ${style}.
+- QUALITY: ${renderKeywords}.
+- DESIGN: Apply provided design onto the product perfectly.
+- COLOR: ${color}.
+- TEXTURE: ${selectedMaterialDesc}
+- POSITION: ${placement}.
+- STYLE: ${style}.
 - ${bgInstruction}
-${variationInstruction ? `NOTE: ${variationInstruction}` : ''}
-The design must follow the curves, folds, and perspective of the ${category} perfectly.`;
+${variationInstruction ? `NOTE: ${variationInstruction}` : ''}`;
 
   parts.push({ text: promptText });
 
@@ -139,12 +137,7 @@ export async function cleanImage(
     const ai = new GoogleGenAI({ apiKey: API_KEY });
     const imagePart = { inlineData: { data: base64ImageData, mimeType } };
 
-    const promptText = `TASK: Background Removal and Asset Extraction.
-GOAL: Extract the logo/graphic from the image and provide it on a pure transparent background.
-- Remove all shadows, backgrounds, and extra elements.
-- Rectify perspective: Output the design perfectly flat and centered.
-- Enhance edges: Crisp, sharp alpha channel extraction.
-- OUTPUT: PNG with transparency containing ONLY the clean design asset.`;
+    const promptText = `Extract logo/graphic from image, output on pure transparent PNG. Remove backgrounds and shadows.`;
 
     return withRetry(async () => {
         const response = await ai.models.generateContent({
@@ -177,22 +170,12 @@ export async function processVoiceCommand(
     if (!API_KEY) throw new Error("API_KEY not set");
 
     const ai = new GoogleGenAI({ apiKey: API_KEY });
-    const model = 'gemini-3-flash-preview';
 
-    const prompt = `
-    You are a Voice UI assistant for a Mockup App.
-    Map the user's audio request to these options:
-    - Categories: ${JSON.stringify(availableCategories)}
-    - Styles: ${JSON.stringify(availableStyles)}
-    - Colors: ${JSON.stringify(availableColors)}
-
-    Return ONLY a JSON object with:
-    { "categories": string[], "style": string|null, "color": string|null, "placement": string|null }
-    `;
+    const prompt = `Map user request to: categories (${JSON.stringify(availableCategories)}), styles (${JSON.stringify(availableStyles)}), colors (${JSON.stringify(availableColors)}). Return JSON with string array categories, style, color, placement.`;
 
     return withRetry(async () => {
         const response = await ai.models.generateContent({
-            model: model,
+            model: 'gemini-3-flash-preview',
             contents: { parts: [{ inlineData: { data: audioBase64, mimeType } }, { text: prompt }] },
             config: {
                 responseMimeType: "application/json",
@@ -208,7 +191,7 @@ export async function processVoiceCommand(
             }
         });
 
-        const cleanedText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const cleanedText = response.text.trim();
         return JSON.parse(cleanedText) as VoiceCommandResult;
-    });
+    }, 1, 2000);
 }

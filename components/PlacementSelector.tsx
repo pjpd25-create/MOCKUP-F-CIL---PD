@@ -27,25 +27,28 @@ const VisualIcon = ({ type, placement }: { type: string, placement: string }) =>
     // Coordenadas refinadas para posicionamento 3D
     if (type === 'apparel') {
         if (view === 'frente') {
-            target = { x: 50, y: 35 }; 
-            if (p.includes('peito esquerdo') || p.includes('bolso')) target = { x: 65, y: 32 }; 
-            if (p.includes('peito direito')) target = { x: 35, y: 32 }; 
-            if (p.includes('manga esquerda')) target = { x: 88, y: 35 };
-            if (p.includes('manga direita')) target = { x: 12, y: 35 };
+            target = { x: 50, y: 40 }; 
+            if (p.includes('peito esquerdo')) target = { x: 35, y: 35 }; 
+            if (p.includes('peito direito')) target = { x: 65, y: 35 }; 
+            if (p.includes('manga esquerda')) target = { x: 20, y: 40 };
+            if (p.includes('manga direita')) target = { x: 80, y: 40 };
         } else if (view === 'traseira') {
-            target = { x: 50, y: 38 }; 
-            if (p.includes('nuca')) target = { x: 50, y: 18 };
+            target = { x: 50, y: 45 }; 
+            if (p.includes('nuca')) target = { x: 50, y: 22 };
         }
     } else if (type === 'headwear') {
-        target = { x: 50, y: 42 };
-        if (view === 'traseira') target = { x: 50, y: 65 };
-        if (view === 'topo') target = { x: 50, y: 25 };
-        if (p.includes('lateral esquerda')) target = { x: 75, y: 50 };
-        if (p.includes('lateral direita')) target = { x: 25, y: 50 };
+        if (view === 'topo') {
+            target = { x: 50, y: 25 };
+        } else if (view === 'lateral') {
+            target = p.includes('esquerda') ? { x: 30, y: 50 } : { x: 70, y: 50 };
+        } else if (view === 'traseira') {
+            target = { x: 50, y: 65 };
+        } else {
+            target = { x: 50, y: 42 };
+        }
     } else if (type === 'drinkware') {
         target = { x: 50, y: 45 };
-        if (view === 'traseira') target = { x: 50, y: 45 };
-        if (p.includes('vertical')) target = { x: 75, y: 45 };
+        if (p.includes('traseira')) target = { x: 50, y: 45 };
     } else if (type === 'stationery' || type === 'books') {
         if (p.includes('esquerdo')) target = { x: 25, y: 25 };
         else if (p.includes('direito')) target = { x: 75, y: 25 };
@@ -54,7 +57,7 @@ const VisualIcon = ({ type, placement }: { type: string, placement: string }) =>
         else target = { x: 50, y: 50 };
     }
 
-    const baseStyle = "fill-gray-800 stroke-gray-600 stroke-1 transition-all duration-300";
+    const baseStyle = "fill-gray-800/50 stroke-gray-600 stroke-1 transition-all duration-300";
     
     const getIcon = () => {
         if (type === 'apparel') {
@@ -62,14 +65,14 @@ const VisualIcon = ({ type, placement }: { type: string, placement: string }) =>
                 return (
                     <g className={baseStyle}>
                         <path d="M6 8 L4 9 L6 18 L18 18 L20 9 L18 8 L15 7 L12 8 L9 7 Z" />
-                        <path d="M12 8 C10 8 9 7 9 7 L8 6 L12 5 L16 6 L15 7 C15 7 14 8 12 8 Z" className="fill-gray-700" />
+                        <path d="M12 8 C10 8 9 7 9 7 L8 6 L12 5 L16 6 L15 7 C15 7 14 8 12 8 Z" className="fill-gray-700/50" />
                     </g>
                 );
             }
             return (
                 <g className={baseStyle}>
                     <path d="M6 8 L4 9 L6 18 L18 18 L20 9 L18 8 L15 7 L12 9 L9 7 Z" />
-                    <path d="M12 9 C10 9 9 7 9 7 L8 6 L12 5 L16 6 L15 7 C15 7 14 9 12 9 Z" className="fill-gray-700" />
+                    <path d="M12 9 C10 9 9 7 9 7 L8 6 L12 5 L16 6 L15 7 C15 7 14 9 12 9 Z" className="fill-gray-700/50" />
                 </g>
             );
         }
@@ -89,18 +92,9 @@ const VisualIcon = ({ type, placement }: { type: string, placement: string }) =>
                 </g>
             );
         }
-        if (type === 'books') {
-            return (
-                <g className={baseStyle}>
-                   <path d="M6 4 L18 4 L18 20 L6 20 Z" />
-                   <path d="M6 4 L4 5 L4 21 L6 20" />
-                </g>
-            )
-        }
         return (
             <g className={baseStyle}>
                 <rect x="5" y="5" width="14" height="14" rx="1" />
-                <path d="M5 9 L19 9 M9 5 L9 19" className="stroke-gray-700/30" />
             </g>
         );
     };
@@ -113,19 +107,12 @@ const VisualIcon = ({ type, placement }: { type: string, placement: string }) =>
     };
 
     return (
-        <svg viewBox="0 0 24 24" className="w-16 h-16 mb-4 drop-shadow-lg">
+        <svg viewBox="0 0 24 24" className="w-12 h-12 mb-3 drop-shadow-lg overflow-visible">
             {getIcon()}
-            {p.includes('total') || p.includes('envolvente') ? (
-                <rect x="7" y="7" width="10" height="8" className="fill-red-500/10 stroke-red-500/30 stroke-dashed stroke-1 animate-pulse" rx="1" />
-            ) : (
-                <g className="animate-pulse">
-                    <circle cx={(target.x / 100) * 24} cy={(target.y / 100) * 24} r="2.5" className="fill-red-600 shadow-xl" />
-                    <circle cx={(target.x / 100) * 24} cy={(target.y / 100) * 24} r="4" className="stroke-red-500/40 fill-none stroke-1" />
-                </g>
-            )}
-            <text x="12" y="23" fontSize="2.8" textAnchor="middle" className="fill-gray-400 font-black uppercase tracking-[0.2em] select-none">
-                {labelMap[view]}
-            </text>
+            <g className="animate-pulse">
+                <circle cx={(target.x / 100) * 24} cy={(target.y / 100) * 24} r="3" className="fill-red-600 shadow-[0_0_10px_rgba(220,38,38,0.8)]" />
+                <circle cx={(target.x / 100) * 24} cy={(target.y / 100) * 24} r="5" className="stroke-red-500/30 fill-none stroke-1" />
+            </g>
         </svg>
     )
 }
@@ -136,31 +123,31 @@ export const PlacementSelector: React.FC<PlacementSelectorProps> = ({ placements
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center px-1">
-        <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">Posicionamento 3D</label>
+        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">Localização 3D</label>
         {selectedPlacement && (
-            <span className="text-[10px] font-bold text-red-500 uppercase tracking-tighter bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">{selectedPlacement}</span>
+            <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter bg-red-600/10 px-2 py-0.5 rounded border border-red-600/20">{selectedPlacement}</span>
         )}
       </div>
-      <div className={`grid grid-cols-2 gap-3 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
+      <div className={`grid grid-cols-2 gap-2 ${disabled ? 'opacity-30 pointer-events-none' : ''}`}>
         {placements.map((placement) => {
           const isSelected = selectedPlacement === placement;
           return (
               <button
                 key={placement}
                 onClick={() => onSelectPlacement(placement)}
-                className={`flex flex-col items-center justify-center p-4 rounded-3xl border-2 transition-all duration-500 group relative overflow-hidden ${
+                className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 transition-all duration-300 group relative overflow-hidden h-32 ${
                     isSelected 
-                        ? 'bg-red-600/5 border-red-600 shadow-[0_0_25px_rgba(220,38,38,0.15)] scale-[1.02] z-10' 
-                        : 'bg-black/40 border-gray-800 text-gray-500 hover:border-gray-600 hover:bg-black/60 hover:text-gray-300'
+                        ? 'bg-red-600/5 border-red-600 shadow-xl scale-[1.02] z-10' 
+                        : 'bg-black/40 border-gray-800 text-gray-500 hover:border-gray-700 hover:bg-black/60'
                 }`}
               >
                 {isSelected && (
-                    <div className="absolute inset-0 bg-gradient-to-tr from-red-600/10 via-transparent to-transparent opacity-50" />
+                    <div className="absolute inset-0 bg-gradient-to-tr from-red-600/5 to-transparent opacity-50" />
                 )}
                 
                 <VisualIcon type={categoryType} placement={placement} />
                 
-                <span className={`text-[9px] font-black uppercase tracking-widest text-center leading-tight transition-colors duration-300 ${isSelected ? 'text-white' : 'text-gray-600 group-hover:text-gray-400'}`}>
+                <span className={`text-[8px] font-black uppercase tracking-widest text-center leading-tight transition-colors duration-300 ${isSelected ? 'text-white' : 'text-gray-600 group-hover:text-gray-400'}`}>
                     {placement}
                 </span>
 
