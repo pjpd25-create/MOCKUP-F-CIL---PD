@@ -5,18 +5,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gerador de Mockups com IA</title>
+    <title>Mockup Fácil - Branding IA Profissional</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              'brand-primary': '#4f46e5',
-              'brand-secondary': '#6366f1',
-              'brand-light': '#e0e7ff',
-              'brand-dark': '#3730a3',
+              'brand-orange': '#f97316',
+              'brand-red': '#dc2626',
+              'brand-dark': '#080000',
+              'brand-surface': 'rgba(20, 10, 10, 0.7)',
             },
+            backgroundImage: {
+              'striking-gradient': 'radial-gradient(circle at top right, #3b0a0a, #080000, #2a1105)',
+            }
           }
         }
       }
@@ -39,35 +42,40 @@
         margin: 0;
         padding: 0;
         min-height: 100vh;
-        background-color: black;
+        background: radial-gradient(circle at 50% 0%, #3b0707 0%, #080000 70%, #2a0e00 100%);
+        background-attachment: fixed;
+        color: #f3f4f6;
         overflow-x: hidden;
       }
       #root {
         min-height: 100vh;
       }
       ::-webkit-scrollbar {
-        width: 6px;
+        width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent;
+        background: rgba(0,0,0,0.3);
       }
       ::-webkit-scrollbar-thumb {
-        background: #1f2937;
+        background: linear-gradient(to bottom, #dc2626, #f97316);
         border-radius: 10px;
       }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #dc2626;
+      @keyframes glow-pulse {
+        0% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.2); }
+        50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.5); }
+        100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.2); }
       }
-      @keyframes fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
+      .animate-glow {
+        animation: glow-pulse 3s infinite ease-in-out;
       }
-      .animate-fade-in {
-        animation: fade-in 0.5s ease-out forwards;
+      .glass-card {
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(249, 115, 22, 0.1);
       }
     </style>
   </head>
-  <body class="bg-black text-gray-200">
+  <body>
     <div id="root"></div>
     <script src="https://unpkg.com/jspdf@latest/dist/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>

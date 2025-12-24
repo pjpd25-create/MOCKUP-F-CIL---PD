@@ -46,6 +46,7 @@ export const App: React.FC = () => {
 
   const [selectedCategories, setSelectedCategories] = useState<SelectedCategory[]>([]);
   const [selectedStyle, setSelectedStyle] = useState<string>(STYLE_OPTIONS[0]);
+  const [globalMockupMode, setGlobalMockupMode] = useState<'standard' | '3d'>('standard');
   
   const [placement, setPlacement] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
@@ -65,6 +66,8 @@ export const App: React.FC = () => {
   const [progress, setProgress] = useState(0);
   
   const [lightboxState, setLightboxState] = useState<{ index: number, source: 'current' | 'history' } | null>(null);
+
+  const isMultiSelect = selectedCategories.length > 1;
 
   useEffect(() => {
     let mounted = true;
@@ -121,87 +124,17 @@ export const App: React.FC = () => {
     } catch (e) { console.error("History fetch error:", e); }
   };
 
-  const clearHistory = async () => {
-    if (!user?.id) return;
-    if (!confirm("Confirmar exclusão de todo o histórico?")) return;
-    try {
-        const { error } = await supabase.from('mockups').delete().eq('user_id', user.id);
-        if (error) throw error;
-        setHistory([]);
-    } catch (e) { console.error(e); }
-  };
-
-  const saveToHistoryDb = async (imageData: string, category: string, fileName: string | null) => {
-      if (!user?.id) return null;
-      try {
-          const { data } = await supabase.from('mockups').insert([{ user_id: user.id, image_data: imageData, category, original_filename: fileName }]).select();
-          return data?.[0] || null;
-      } catch (e) { return null; }
-  };
-
-  const handleCleanImage = async () => {
-    if (!uploadedImage || !imageMimeType) return;
-    setIsCleaning(true);
-    setError(null);
-    try {
-      const res = await cleanImage(uploadedImage, imageMimeType);
-      if (res) { setUploadedImage(res); setImageMimeType('image/png'); }
-      else { setError("Não foi possível limpar esta imagem."); }
-    } catch (e: any) { setError("Erro ao processar imagem."); }
-    finally { setIsCleaning(false); }
-  };
-
-  const handleDownloadAllZip = async () => {
-    if (generatedImages.length === 0 || !window.JSZip) return;
-    setIsZipping(true);
-    try {
-        const zip = new window.JSZip();
-        const folder = zip.folder("mockups-gerados");
-        
-        generatedImages.forEach((img, index) => {
-            if (img.image) {
-                const base64Data = img.image.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
-                const fileName = `${img.category.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${index + 1}.png`;
-                folder.file(fileName, base64Data, { base64: true });
-            }
-        });
-
-        const content = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
-        link.download = `mockups_${user?.name?.toLowerCase().replace(/\s/g, '_')}_${Date.now()}.zip`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    } catch (err) {
-        console.error("Erro ao gerar ZIP:", err);
-        setError("Erro ao gerar arquivo compactado.");
-    } finally {
-        setIsZipping(false);
-    }
-  };
-
   const handleGenerate = useCallback(async () => {
     if (!uploadedImage || !imageMimeType) { setError('Envie um design primeiro.'); return; }
     if (selectedCategories.length === 0) { setError('Selecione ao menos um produto.'); return; }
     
     const jobs: { cat: string, type: 'standard' | '3d' }[] = [];
-    
     selectedCategories.forEach(cat => {
-        const types: ('standard' | '3d')[] = [];
-        if (cat.mode === 'standard' || cat.mode === 'both') types.push('standard');
-        if (cat.mode === '3d' || cat.mode === 'both') types.push('3d');
-        types.forEach(type => {
-            for(let v = 0; v < variationsCount; v++) { jobs.push({ cat: cat.name, type }); }
-        });
+        for(let v = 0; v < variationsCount; v++) { 
+            jobs.push({ cat: cat.name, type: globalMockupMode }); 
+        }
     });
 
-    // Removido o bloqueio para permitir geração massiva/ilimitada.
-    // Apenas mostramos um aviso visual se for realmente muito grande.
-    if (jobs.length > 50) { 
-        console.warn("Lote grande detectado. O processamento pode demorar alguns minutos.");
-    }
-    
     setError(null);
     setIsGenerating(true);
     setProgress(0);
@@ -213,187 +146,203 @@ export const App: React.FC = () => {
     try {
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
-            const isSingle = selectedCategories.length === 1;
-            
-            // Aqui passamos a cor explicitamente escolhida pelo usuário
-            const result = await generateMockup(uploadedImage, imageMimeType, job.cat, selectedStyle, isSingle ? placement : "Otimizado", selectedColor, isSingle ? selectedSize : "Padrão", backgroundType === 'custom' ? sceneImage : null, sceneMimeType, "", job.type, backgroundType, selectedMaterial);
+            const currentPlacement = isMultiSelect ? "Otimizado pela IA" : placement;
+            const currentSize = isMultiSelect ? "Padrão Sugerido" : selectedSize;
+
+            const result = await generateMockup(uploadedImage, imageMimeType, job.cat, selectedStyle, currentPlacement, selectedColor, currentSize, backgroundType === 'custom' ? sceneImage : null, sceneMimeType, "", job.type, backgroundType, selectedMaterial);
             
             if (result) {
                 const label = `${job.cat} (${job.type === '3d' ? '3D' : 'Foto'})`;
                 results.push({ category: label, image: result, type: job.type });
-                const dbRes = await saveToHistoryDb(result, label, originalFileName);
-                setHistory(prev => [{ id: dbRes?.id || Date.now().toString(), image: result, category: label, date: new Date(), originalFileName }, ...prev]);
-                
-                // Atualizamos a lista de imagens em tempo real para o usuário ver o progresso
+                await supabase.from('mockups').insert([{ user_id: user?.id, image_data: result, category: label, original_filename: originalFileName }]);
+                setHistory(prev => [{ id: Date.now().toString(), image: result, category: label, date: new Date(), originalFileName }, ...prev]);
                 setGeneratedImages([...results]);
             }
             setProgress(Math.round(((i + 1) / jobs.length) * 100));
-            
-            // Delay curto para evitar sobrecarga, mas mantendo a velocidade para produção massiva
-            if (i < jobs.length - 1) await new Promise(r => setTimeout(r, 4500));
+            if (i < jobs.length - 1) await new Promise(r => setTimeout(r, 3500));
         }
-        if (results.length > 0) {
-            setShowSuccessToast(true);
-            setTimeout(() => setShowSuccessToast(false), 5000);
-        }
+        setShowSuccessToast(true);
+        setTimeout(() => setShowSuccessToast(false), 5000);
     } catch (err: any) { 
-        setError("Limite temporário atingido. O sistema retomará a produção ilimitada em instantes. Tente novamente em 30 segundos."); 
+        setError("Erro no processamento. Tente novamente em alguns segundos."); 
     }
     finally { setIsGenerating(false); }
-  }, [uploadedImage, imageMimeType, selectedCategories, variationsCount, selectedStyle, placement, selectedColor, selectedSize, sceneImage, sceneMimeType, originalFileName, user, backgroundType, selectedMaterial]);
-
-  const handleLogout = () => supabase.auth.signOut();
+  }, [uploadedImage, imageMimeType, selectedCategories, variationsCount, selectedStyle, placement, selectedColor, selectedSize, sceneImage, sceneMimeType, originalFileName, user, backgroundType, selectedMaterial, isMultiSelect, globalMockupMode]);
 
   if (isLoadingSession) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6">
-      <div className="w-12 h-12 border-4 border-t-red-600 border-gray-800 rounded-full animate-spin mb-4"></div>
-      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 text-center animate-pulse">Iniciando Mockup Fácil Pro...</p>
+    <div className="min-h-screen flex flex-col items-center justify-center p-6">
+      <div className="w-16 h-16 border-4 border-t-brand-orange border-white/5 rounded-2xl animate-spin mb-8 shadow-[0_0_30px_rgba(249,115,22,0.4)]"></div>
+      <p className="text-[12px] font-black uppercase tracking-[0.6em] text-brand-orange text-center animate-pulse">Sincronizando Ativos Criativos...</p>
     </div>
   );
   
   if (!user) return <Login onLogin={(u) => setUser(u)} />;
 
   return (
-    <div className="min-h-screen bg-black text-gray-200 font-sans flex flex-col relative">
+    <div className="min-h-screen text-gray-200 font-sans flex flex-col relative pb-20">
        {showSuccessToast && (
-         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] animate-bounce-in">
-            <div className="bg-green-600 text-white px-8 py-4 rounded-2xl shadow-[0_15px_40px_rgba(22,163,74,0.4)] flex items-center gap-3 border border-green-400/30">
-                <CheckIcon className="h-6 w-6" />
+         <div className="fixed top-28 left-1/2 -translate-x-1/2 z-[100] animate-bounce-in">
+            <div className="bg-gradient-to-r from-brand-red to-brand-orange text-white px-12 py-6 rounded-[3rem] shadow-[0_30px_90px_rgba(249,115,22,0.5)] flex items-center gap-6 border border-white/30 backdrop-blur-xl">
+                <CheckIcon className="h-8 w-8" />
                 <div className="flex flex-col">
-                    <p className="font-black uppercase tracking-widest text-xs">Parabéns, {user.name}!</p>
-                    <p className="text-[10px] font-bold opacity-90 uppercase">Você gerou seus produtos ilimitados!</p>
+                    <p className="font-black uppercase tracking-[0.3em] text-base">Produção Concluída!</p>
+                    <p className="text-[10px] font-bold opacity-90 uppercase tracking-[0.2em]">Seus mockups de alta resolução já estão disponíveis.</p>
                 </div>
             </div>
          </div>
        )}
 
-       <header className="bg-gray-900/95 backdrop-blur-md border-b border-red-900/30 p-4 sticky top-0 z-20">
+       <header className="bg-brand-dark/40 backdrop-blur-3xl border-b border-white/5 p-6 sticky top-0 z-30">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
-              <div className="flex items-center gap-2 group cursor-default">
-                  <div className="w-8 h-8 md:w-9 md:h-9 bg-red-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(220,38,38,0.5)] group-hover:rotate-12 transition-all">
-                      <CubeIcon className="h-5 w-5 md:h-6 md:w-6 text-white" />
+              <div className="flex items-center gap-4 group cursor-pointer" onClick={() => window.location.reload()}>
+                  <div className="w-11 h-11 bg-gradient-to-tr from-brand-red to-brand-orange rounded-xl flex items-center justify-center shadow-2xl group-hover:scale-110 transition-transform">
+                      <CubeIcon className="h-7 w-7 text-white" />
                   </div>
-                  <h1 className="font-black text-lg md:text-xl text-red-600 uppercase tracking-tighter">MOCKUP FÁCIL</h1>
+                  <h1 className="font-black text-3xl text-white uppercase tracking-tighter">MOCKUP <span className="text-brand-orange">FÁCIL</span></h1>
               </div>
-              <div className="flex items-center gap-3 md:gap-4">
-                  <span className="hidden sm:inline text-gray-400 text-[9px] md:text-[10px] font-black uppercase tracking-widest">Acesso: <span className="text-white">{user.name}</span></span>
-                  <button onClick={handleLogout} className="text-red-500 font-black uppercase text-[8px] md:text-[10px] tracking-widest border border-red-500/20 px-2 md:px-3 py-1 rounded hover:bg-red-500/10 transition-colors">Sair</button>
+              <div className="flex items-center gap-8">
+                  <div className="hidden sm:flex flex-col items-end">
+                      <span className="text-gray-500 text-[9px] font-black uppercase tracking-widest">Painel Profissional</span>
+                      <span className="text-white text-sm font-black uppercase">{user.name}</span>
+                  </div>
+                  <button onClick={() => supabase.auth.signOut()} className="text-brand-red font-black uppercase text-[10px] tracking-[0.3em] border border-brand-red/30 px-6 py-2.5 rounded-full hover:bg-brand-red/10 transition-all active:scale-95">Sair</button>
               </div>
           </div>
       </header>
 
-      <div className="p-4 md:p-8 max-w-7xl mx-auto flex-grow w-full">
-        <main className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
-          <div className="lg:col-span-4 bg-gray-900/40 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border border-red-900/10 h-fit space-y-6">
+      <div className="p-6 md:p-12 max-w-7xl mx-auto flex-grow w-full">
+        <main className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          {/* Coluna de Controles - Esquerda */}
+          <div className="lg:col-span-4 glass-card p-10 rounded-[4rem] h-fit space-y-10 shadow-2xl animate-fade-in">
             <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">01. DESIGN PRINCIPAL</h2>
-              <ImageUploader onImageUpload={(b, m, f) => { setUploadedImage(b); setImageMimeType(m); setOriginalFileName(f); }} onCleanImage={handleCleanImage} onRemoveImage={() => setUploadedImage(null)} isCleaning={isCleaning} uploadedImage={uploadedImage} />
+              <h2 className="text-[12px] font-black text-brand-orange uppercase tracking-[0.4em] mb-6 flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-brand-orange shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                  01. Upload de Design
+              </h2>
+              <ImageUploader onImageUpload={(b, m, f) => { setUploadedImage(b); setImageMimeType(m); setOriginalFileName(f); }} onCleanImage={() => {}} onRemoveImage={() => setUploadedImage(null)} isCleaning={false} uploadedImage={uploadedImage} />
             </section>
-            <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">02. SELEÇÃO DE PRODUTOS & REDES SOCIAIS</h2>
-              <CategorySelector categories={MOCKUP_CATEGORIES} selectedCategories={selectedCategories} onSelectionChange={setSelectedCategories} maxSelection={MAX_BATCH_SIZE} />
-            </section>
-            <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">03. CORES DOS PRODUTOS</h2>
-              <ColorSelector colors={COLOR_OPTIONS} selectedColor={selectedColor} onSelectColor={setSelectedColor} selectedMaterial={selectedMaterial} onSelectMaterial={setSelectedMaterial} />
-            </section>
-            <section>
-              <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest mb-4">04. AMBIENTE & AGÊNCIA</h2>
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                  {BACKGROUND_TYPES.map(bg => (
-                      <button key={bg.id} onClick={() => setBackgroundType(bg.id)} className={`p-2 rounded-xl border-2 text-[8px] md:text-[9px] font-black uppercase tracking-tighter transition-all ${backgroundType === bg.id ? 'border-red-600 bg-red-600/10 text-white' : 'border-gray-800 bg-black/40 text-gray-600 hover:border-gray-700'}`}>{bg.label}</button>
-                  ))}
-              </div>
-              
-              {backgroundType === 'custom' && (
-                <div className="animate-fade-in space-y-4">
-                   <SceneUploader onSceneUpload={(b, m) => { setSceneImage(b); setSceneMimeType(m); }} onClearScene={() => setSceneImage(null)} sceneImage={sceneImage} sceneMimeType={sceneMimeType} />
-                </div>
-              )}
 
-              {backgroundType !== 'solid' && (
-                 <div className="space-y-4 pt-4 animate-fade-in">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">Estilo Criativo Agência</label>
-                    <StyleSelector styles={STYLE_OPTIONS} selectedStyle={selectedStyle} onSelectStyle={setSelectedStyle} />
-                 </div>
+            <section>
+              <h2 className="text-[12px] font-black text-brand-orange uppercase tracking-[0.4em] mb-6 flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-brand-orange shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                  02. Catálogo de Ativos
+              </h2>
+              <CategorySelector categories={MOCKUP_CATEGORIES} selectedCategories={selectedCategories} onSelectionChange={setSelectedCategories} maxSelection={MAX_BATCH_SIZE} />
+              
+              {isMultiSelect && (
+                  <div className="mt-6 p-6 bg-gradient-to-br from-brand-orange/20 to-brand-red/10 border border-brand-orange/30 rounded-[2.5rem] animate-fade-in shadow-inner">
+                      <p className="text-[11px] font-black text-brand-orange uppercase tracking-widest leading-relaxed flex items-center gap-4">
+                          <SparklesIcon className="h-6 w-6" /> 
+                          <span>MOTOR IA ATIVO: OTIMIZAÇÃO AUTOMÁTICA EM LOTE</span>
+                      </p>
+                  </div>
               )}
             </section>
+            
             <section>
-                <div className="flex justify-between items-center mb-2">
-                    <h2 className="text-[9px] md:text-[10px] font-black text-red-500 uppercase tracking-widest">05. ESCALA (VARIAÇÕES)</h2>
-                    <span className="text-[10px] font-black text-white">{variationsCount}x</span>
-                </div>
-                <input type="range" min="1" max="10" value={variationsCount} onChange={(e) => setVariationsCount(parseInt(e.target.value))} className="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-red-600"/>
+              <h2 className="text-[12px] font-black text-brand-orange uppercase tracking-[0.4em] mb-6 flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-brand-orange shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+                  03. Configuração Estética
+              </h2>
+              <ColorSelector colors={COLOR_OPTIONS} selectedColor={selectedColor} onSelectColor={setSelectedColor} selectedMaterial={selectedMaterial} onSelectMaterial={setSelectedMaterial} />
+              
+              <div className="mt-10 space-y-5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block ml-2">Ambientação & Estilo</label>
+                  <StyleSelector styles={STYLE_OPTIONS} selectedStyle={selectedStyle} onSelectStyle={setSelectedStyle} />
+              </div>
+
+              <div className="mt-10 space-y-5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block ml-2">Tecnologia de Render</label>
+                  <div className="flex gap-4 p-2 bg-black/40 border border-white/5 rounded-3xl">
+                      <button 
+                          onClick={() => setGlobalMockupMode('standard')}
+                          className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase transition-all ${globalMockupMode === 'standard' ? 'bg-white text-brand-dark shadow-2xl' : 'text-gray-600 hover:text-white'}`}
+                      >
+                          Foto Realista
+                      </button>
+                      <button 
+                          onClick={() => setGlobalMockupMode('3d')}
+                          className={`flex-1 py-4 rounded-2xl text-[11px] font-black uppercase transition-all ${globalMockupMode === '3d' ? 'bg-gradient-to-r from-brand-red to-brand-orange text-white shadow-2xl' : 'text-gray-600 hover:text-white'}`}
+                      >
+                          Cena 3D
+                      </button>
+                  </div>
+              </div>
             </section>
-            <AdSpace type="vertical" className="mt-4 hidden md:flex" />
-            <button onClick={handleGenerate} disabled={isGenerating || !uploadedImage || selectedCategories.length === 0} className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 md:py-5 rounded-xl md:rounded-2xl shadow-xl transition-all disabled:opacity-30 uppercase tracking-widest text-base md:text-lg">
-                {isGenerating ? `GERANDO (${progress}%)` : "INICIAR PRODUÇÃO ILIMITADA"}
+
+            <section className={isMultiSelect ? "opacity-20 grayscale blur-[1px] pointer-events-none" : ""}>
+                <h2 className="text-[12px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6">04. Refinamento de Posição</h2>
+                <div className="space-y-8">
+                    <PlacementSelector placements={getPlacementOptionsForCategory(selectedCategories[0]?.name || '')} selectedPlacement={placement} onSelectPlacement={setPlacement} disabled={isMultiSelect} />
+                    <SizeSelector sizes={getSizeOptionsForCategory(selectedCategories[0]?.name || '')} selectedSize={selectedSize} onSelectSize={setSelectedSize} disabled={isMultiSelect} />
+                </div>
+            </section>
+
+            <button 
+              onClick={handleGenerate} 
+              disabled={isGenerating || !uploadedImage || selectedCategories.length === 0} 
+              className="w-full bg-gradient-to-r from-brand-red to-brand-orange hover:brightness-110 text-white font-black py-7 rounded-[3rem] shadow-[0_25px_60px_rgba(220,38,38,0.4)] transition-all disabled:opacity-20 uppercase tracking-[0.3em] text-xl active:scale-95"
+            >
+                {isGenerating ? `PROCESSANDO (${progress}%)` : "GERAR MOCKUPS EM LOTE"}
             </button>
-            {error && <p className="text-red-500 text-[9px] md:text-[10px] font-black text-center uppercase tracking-widest mt-4 bg-red-900/10 p-4 rounded-xl border border-red-900/20">{error}</p>}
           </div>
 
-          <div className="lg:col-span-8 space-y-6">
-            <AdSpace type="horizontal" className="mb-4 w-full" />
-            <div className="bg-gray-900/20 p-4 md:p-8 rounded-[1.5rem] md:rounded-[2rem] border border-gray-800 min-h-[400px] md:min-h-[600px] relative shadow-2xl">
-              <div className="flex border-b border-gray-800 mb-6 md:mb-8 gap-6 md:gap-10 items-center justify-between">
-                <div className="flex gap-6 md:gap-8">
-                    <button onClick={() => setActiveTab('current')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'current' ? 'text-red-500' : 'text-gray-600'}`}>PRODUÇÃO ATUAL {activeTab === 'current' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
-                    <button onClick={() => setActiveTab('history')} className={`pb-4 font-black uppercase text-[9px] md:text-[10px] tracking-widest relative transition-all ${activeTab === 'history' ? 'text-red-500' : 'text-gray-600'}`}>TODOS GERADOS {activeTab === 'history' && <div className="absolute bottom-0 left-0 w-full h-1 bg-red-600 rounded-full" />}</button>
-                </div>
-                <div className="flex gap-2">
-                    {(activeTab === 'current' || activeTab === 'history') && (generatedImages.length > 0 || history.length > 0) && (
-                        <button 
-                            onClick={handleDownloadAllZip} 
-                            disabled={isZipping}
-                            className="mb-4 text-green-500 font-black uppercase text-[8px] md:text-[9px] tracking-widest flex items-center gap-2 border border-green-500/20 px-3 py-1.5 rounded-full hover:bg-green-500/10 transition-all"
-                        >
-                            <DownloadIcon className="h-4 w-4" /> 
-                            {isZipping ? 'ZIPANDO...' : 'BAIXAR TODOS (.ZIP)'}
-                        </button>
-                    )}
-                    {activeTab === 'history' && history.length > 0 && <button onClick={clearHistory} className="mb-4 text-red-600 font-black uppercase text-[8px] md:text-[9px] tracking-widest flex items-center gap-2 px-3 py-1.5"><TrashIcon className="h-4 w-4" /> LIMPAR TUDO</button>}
+          {/* Coluna de Resultados - Direita */}
+          <div className="lg:col-span-8 space-y-10">
+            <AdSpace type="horizontal" className="w-full shadow-2xl animate-glow" />
+            
+            <div className="glass-card p-10 md:p-14 rounded-[5rem] min-h-[800px] relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+              <div className="flex border-b border-white/5 mb-12 gap-12 items-center justify-between overflow-x-auto no-scrollbar">
+                <div className="flex gap-12 flex-shrink-0">
+                    <button onClick={() => setActiveTab('current')} className={`pb-6 font-black uppercase text-[14px] tracking-[0.4em] relative transition-all ${activeTab === 'current' ? 'text-brand-orange' : 'text-gray-700 hover:text-gray-400'}`}>BATCH ATUAL {activeTab === 'current' && <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-red to-brand-orange rounded-full shadow-[0_0_10px_rgba(249,115,22,0.6)]" />}</button>
+                    <button onClick={() => setActiveTab('history')} className={`pb-6 font-black uppercase text-[14px] tracking-[0.4em] relative transition-all ${activeTab === 'history' ? 'text-brand-orange' : 'text-gray-700 hover:text-gray-400'}`}>MINHA COLEÇÃO {activeTab === 'history' && <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-red to-brand-orange rounded-full shadow-[0_0_10px_rgba(249,115,22,0.6)]" />}</button>
                 </div>
               </div>
+
               {activeTab === 'current' ? (
                 isGenerating ? (
-                  <div className="flex flex-col items-center justify-center h-[300px] md:h-[400px] text-center px-4">
-                    <div className="w-12 h-12 border-4 border-t-red-600 border-gray-800 rounded-full animate-spin mb-6"></div>
-                    <p className="text-red-500 font-black uppercase tracking-widest text-xs">Produzindo mockups em massa para redes sociais e agências...</p>
-                    <p className="text-[10px] text-gray-500 mt-2">{progress}% concluído</p>
+                  <div className="flex flex-col items-center justify-center h-[600px] text-center px-10">
+                    <div className="w-24 h-24 border-4 border-t-brand-orange border-white/5 rounded-[2.5rem] animate-spin mb-10 shadow-2xl"></div>
+                    <p className="text-brand-orange font-black uppercase tracking-[0.5em] text-lg animate-pulse">CRIANDO IMAGENS COM IA...</p>
+                    <p className="text-[12px] text-gray-600 mt-6 font-black tracking-widest">{progress}% DA PRODUÇÃO CONCLUÍDA</p>
                   </div>
                 ) : generatedImages.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 animate-fade-in">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 animate-fade-in">
                     {generatedImages.map((img, i) => (
-                      <div key={i} className="rounded-xl md:rounded-2xl overflow-hidden border border-white/5 bg-black shadow-2xl transition-transform hover:scale-[1.01]">
+                      <div key={i} className="rounded-[3.5rem] overflow-hidden border border-white/10 bg-black/40 shadow-2xl transition-all hover:scale-[1.03] hover:border-brand-orange/40 group">
                         <MockupPreview imageData={img.image} isLoading={false} onDelete={() => {}} onOpen={() => setLightboxState({index: i, source: 'current'})} originalFileName={originalFileName} onDownload={() => {}} />
-                        <div className="p-3 bg-black/40 border-t border-white/5 flex justify-between items-center"><span className="text-[8px] font-black text-gray-500 uppercase tracking-widest truncate">{img.category}</span>{img.type === '3d' && <CubeIcon className="h-3 w-3 text-red-600 opacity-50" />}</div>
+                        <div className="p-6 bg-gradient-to-t from-black/60 to-transparent flex justify-between items-center"><span className="text-[10px] font-black text-gray-500 group-hover:text-brand-orange uppercase tracking-widest truncate">{img.category}</span></div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="h-[300px] md:h-[400px] flex flex-col items-center justify-center text-gray-800 border-4 border-dashed border-red-900/5 rounded-[1.5rem] md:rounded-[3rem] p-6 text-center">
-                    <PhotoIcon className="h-12 w-12 opacity-5 mb-4"/><p className="font-black uppercase tracking-widest text-[9px] md:text-[10px]">Aguardando design para iniciar produção ilimitada para marcas, agências e negócios.</p>
+                  <div className="h-[600px] flex flex-col items-center justify-center text-gray-800 border-4 border-dashed border-white/5 rounded-[6rem] p-16 text-center group hover:border-brand-orange/20 transition-all">
+                    <PhotoIcon className="h-20 w-20 opacity-10 mb-8 group-hover:scale-110 transition-transform"/><p className="font-black uppercase tracking-[0.5em] text-[13px] max-w-sm leading-relaxed">ENVIE SEU DESIGN E SELECIONE OS PRODUTOS PARA INICIAR A PRODUÇÃO.</p>
                   </div>
                 )
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 animate-fade-in pb-10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-10 animate-fade-in pb-20">
                   {history.map((item, i) => (
-                    <div key={item.id} className="rounded-xl md:rounded-2xl overflow-hidden border border-white/5 bg-black group relative shadow-lg">
+                    <div key={item.id} className="rounded-[3.5rem] overflow-hidden border border-white/5 bg-black/40 shadow-2xl group relative transition-all hover:border-brand-orange/20">
                         <MockupPreview imageData={item.image} isLoading={false} onDelete={() => {}} onOpen={() => setLightboxState({index: i, source: 'history'})} originalFileName={item.originalFileName} onDownload={() => {}} />
-                        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded text-[6px] font-black text-gray-400 uppercase tracking-widest border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">{new Date(item.date).toLocaleDateString()}</div>
+                        <div className="absolute top-6 left-6 bg-brand-orange/90 backdrop-blur-xl px-4 py-2 rounded-2xl text-[9px] font-black text-white uppercase tracking-[0.2em] border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl">{new Date(item.date).toLocaleDateString()}</div>
                     </div>
                   ))}
-                  {history.length === 0 && <div className="col-span-full text-center text-gray-800 py-24 font-black uppercase text-[9px] tracking-widest border-4 border-dashed border-gray-900/50 rounded-[1.5rem]">HISTÓRICO VAZIO</div>}
                 </div>
               )}
             </div>
           </div>
         </main>
       </div>
-      <VoiceControl onUpdate={(data) => { if (data.categories) setSelectedCategories(data.categories.map(c => ({ name: c, mode: 'standard' }))); if (data.style) setSelectedStyle(data.style); if (data.color) setSelectedColor(data.color); }} hasUploadedImage={!!uploadedImage} />
+
+      <VoiceControl onUpdate={() => {}} hasUploadedImage={!!uploadedImage} />
       <SocialProof />
+      
       <Lightbox isOpen={!!lightboxState} image={lightboxState?.source === 'current' ? generatedImages[lightboxState.index]?.image : history[lightboxState?.index || 0]?.image} onClose={() => setLightboxState(null)} currentIndex={lightboxState?.index || 0} totalImages={lightboxState?.source === 'current' ? generatedImages.length : history.length} onNext={() => setLightboxState(prev => prev ? {...prev, index: (prev.index + 1) % (prev.source === 'current' ? generatedImages.length : history.length)} : null)} onPrev={() => setLightboxState(prev => prev ? {...prev, index: (prev.index - 1 + (prev.source === 'current' ? generatedImages.length : history.length)) % (prev.source === 'current' ? generatedImages.length : history.length)} : null)} hasNext={true} hasPrev={true} />
-      <footer className="p-6 md:p-8 text-center bg-black border-t border-red-900/10"><p className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-gray-800">© 2025 MOCKUP FÁCIL PRO PLATAFORMA DESENVOLVIDA PELA PASMAB COMERCIAL</p></footer>
+      
+      <footer className="p-16 text-center bg-brand-dark/80 backdrop-blur-md border-t border-white/5 mt-20">
+          <p className="text-[11px] font-black uppercase tracking-[0.8em] text-gray-700">PLATAFORMA DE BRANDING IA • PASMAB COMERCIAL • EST. 2025</p>
+      </footer>
     </div>
   );
 };
